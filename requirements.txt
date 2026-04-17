@@ -1,0 +1,5 @@
+# Placeholder dependencies for later phases.
+langgraph
+ollama
+qdrant-client
+psycopg2-binary
