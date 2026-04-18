@@ -8,6 +8,8 @@ dependencies = [
     "langgraph",
     "ollama",
     "psycopg2-binary",
+    "ragas",
+    "openai",
     "requests",
     "yfinance",
 ]

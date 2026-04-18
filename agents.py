@@ -1,12 +1,14 @@
+import asyncio
 import re
 import xml.etree.ElementTree as ET
+import traceback
 from urllib.parse import quote_plus
 
 import ollama
 import requests
 import yfinance as yf
 
-from config import MODEL, NEG_WORDS, NEWS_LIMIT, POS_WORDS, PRICE_INTERVAL, PRICE_PERIOD, USER_AGENT
+from config import EVAL_EMBED_MODEL, EVAL_LLM_MODEL, MODEL, NEG_WORDS, NEWS_LIMIT, POS_WORDS, PRICE_INTERVAL, PRICE_PERIOD, RETRY_THRESHOLD, USER_AGENT
 from memory import load_last
 
 UA = {"User-Agent": USER_AGENT}
@@ -157,6 +159,50 @@ def judge(state):
             "decision": m.group(1).upper(),
             "confidence": float(m.group(2)),
             "reasoning": m.group(3).strip(),
+            "weak": float(m.group(2)) < RETRY_THRESHOLD,
             "history": [f"Judge:\n{text}"],
         }
-    return {"decision": "NEUTRAL", "confidence": 0.0, "reasoning": text, "history": [f"Judge:\n{text}"]}
+    return {"decision": "NEUTRAL", "confidence": 0.0, "reasoning": text, "weak": True, "history": [f"Judge:\n{text}"]}
+
+
+def evaluate_reasoning(state):
+    try:
+        try:
+            from ragas import SingleTurnSample
+        except Exception:
+            from ragas.dataset_schema import SingleTurnSample
+        from ragas.llms import llm_factory
+        from ragas.metrics.collections import AnswerRelevancy
+        from ragas.embeddings import HuggingFaceEmbeddings
+        from openai import AsyncOpenAI
+    except Exception:
+        return {"eval_error": traceback.format_exc()}
+
+    debate = "\n".join(state.get("history", []))
+    sample = SingleTurnSample(
+        user_input=f"{state['ticker']} | {state['constraint']}",
+        response=debate + "\nFinal reasoning: " + state["reasoning"],
+        retrieved_contexts=[
+            state["market_data"],
+            state["bull_argument"],
+            state["bear_attack"],
+            state["bull_defense"],
+            state["bear_defends"],
+        ],
+    )
+    client = AsyncOpenAI(api_key="ollama", base_url="http://localhost:11434/v1")
+    llm = llm_factory(EVAL_LLM_MODEL, provider="openai", client=client)
+    emb = HuggingFaceEmbeddings(model=EVAL_EMBED_MODEL)
+
+    async def score():
+        return float(
+            await AnswerRelevancy(llm=llm, embeddings=emb).ascore(
+                user_input=sample.user_input,
+                response=sample.response,
+            )
+        )
+
+    try:
+        return {"eval_relevancy": asyncio.run(score())}
+    except Exception:
+        return {"eval_error": traceback.format_exc()}

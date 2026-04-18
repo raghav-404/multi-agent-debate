@@ -1,5 +1,7 @@
 langgraph
 ollama
 psycopg2-binary
+ragas
 requests
 yfinance
+openai

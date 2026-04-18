@@ -23,6 +23,7 @@ class State(TypedDict, total=False):
     decision: str
     confidence: float
     reasoning: str
+    weak: bool
     history: Annotated[list[str], operator.add]
 
 
