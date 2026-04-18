@@ -1,7 +1,4 @@
-from agents import bull, bear, judge
-from graph import build_graph
-from memory import load_memory, save_memory
-from tools import ask_ollama
+from agents import bull_agent, bear_agent, judge_agent
 
 
 def main():
@@ -11,18 +8,15 @@ def main():
     # Ask the user for one simple question.
     question = input("Enter a market question: ")
 
-    # Call small placeholder parts of the project.
-    build_graph()
-    load_memory()
-    ask_ollama("test prompt")
+    # Call the three simple agents.
+    bull_output = bull_agent(question)
+    bear_output = bear_agent(question)
+    judge_output = judge_agent(bull_output, bear_output)
 
-    # Show the three agent roles.
-    print(bull(question))
-    print(bear(question))
-    print(judge(question))
-
-    # Save a tiny placeholder memory item.
-    save_memory([question])
+    # Print the answers so we can see the debate.
+    print(bull_output)
+    print(bear_output)
+    print(judge_output)
 
 
 if __name__ == "__main__":

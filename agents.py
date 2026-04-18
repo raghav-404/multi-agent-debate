@@ -1,16 +1,17 @@
-def bull(question):
-    # Bull will later argue for buying.
-    print("Bull is thinking...")
-    return "Bull: BUY idea goes here."
+def bull_agent(question):
+    # Bull always gives a positive view.
+    return f"Bull: This looks strong for '{question}'. Buy could work."
 
 
-def bear(question):
-    # Bear will later argue for selling.
-    print("Bear is thinking...")
-    return "Bear: SELL idea goes here."
+def bear_agent(question):
+    # Bear always gives a negative view.
+    return f"Bear: This has risk for '{question}'. Selling may be safer."
 
 
-def judge(question):
-    # Judge will later choose the final decision.
-    print("Judge is thinking...")
-    return "Judge: decision goes here."
+def judge_agent(bull_output, bear_output):
+    # Judge picks one simple final answer.
+    if len(bull_output) > len(bear_output):
+        return "Judge: BUY"
+    if len(bear_output) > len(bull_output):
+        return "Judge: SELL"
+    return "Judge: HOLD"
