@@ -1,4 +1,5 @@
 langgraph
 ollama
+psycopg2-binary
 requests
 yfinance

@@ -11,6 +11,8 @@ class State(TypedDict, total=False):
     ticker: str
     symbol: str
     constraint: str
+    previous_decision: str
+    previous_confidence: float
     market_data: str
     news: list[str]
     news_sentiment: int

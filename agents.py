@@ -7,6 +7,7 @@ import requests
 import yfinance as yf
 
 from config import MODEL, NEG_WORDS, NEWS_LIMIT, POS_WORDS, PRICE_INTERVAL, PRICE_PERIOD, USER_AGENT
+from memory import load_last
 
 UA = {"User-Agent": USER_AGENT}
 
@@ -69,6 +70,11 @@ def sentiment(headlines):
 def prompt(state):
     news = "; ".join(state.get("news", [])) or "No recent headlines."
     history = "\n".join(state.get("history", [])) or "No debate yet."
+    memory = (
+        f"Previous decision: {state['previous_decision']} ({state['previous_confidence']:.2f})\n"
+        if state.get("previous_decision")
+        else ""
+    )
     return (
         f"Ticker: {state['ticker']}\n"
         f"Symbol: {state['symbol']}\n"
@@ -76,6 +82,7 @@ def prompt(state):
         f"Market: {state['market_data']}\n"
         f"News sentiment: {state['news_sentiment']}\n"
         f"News: {news}\n"
+        f"{memory}"
         f"History:\n{history}"
     )
 
@@ -83,12 +90,14 @@ def prompt(state):
 def user_input(state):
     symbol = pick_symbol(state["raw_ticker"])
     news = news_headlines(symbol)
+    prev = load_last(symbol) or {}
     return {
         "ticker": state["raw_ticker"],
         "symbol": symbol,
         "market_data": market_data(symbol),
         "news": news,
         "news_sentiment": sentiment(news),
+        **prev,
         "history": [f"User: {state['raw_ticker']} | Constraint: {state['constraint']} | Symbol: {symbol}"],
     }
 

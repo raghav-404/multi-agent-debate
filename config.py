@@ -1,7 +1,10 @@
 MODEL = "qwen2.5:7b"
+DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/multilightest"
+MEMORY_TABLE = "trade_memory"
 NEWS_LIMIT = 5
 PRICE_PERIOD = "7d"
 PRICE_INTERVAL = "1d"
 USER_AGENT = "Mozilla/5.0"
 POS_WORDS = ("beat", "bull", "growth", "gain", "rally", "up", "strong", "surge", "profit")
 NEG_WORDS = ("miss", "bear", "loss", "risk", "fall", "drop", "weak", "lawsuit", "cut")
+VECTOR_DIM = 3
