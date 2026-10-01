@@ -1,67 +1,62 @@
 import sys
+from time import monotonic
 
-from agents import evaluate_reasoning
+from pydantic import ValidationError
+
+from agents import ModelError
+from config import get_settings
 from graph import build_graph
+from market_data import MarketDataError, NewsDataError
 from memory import init_db, save_run
+from schemas import DebateRequest
 
 
-def read_input():
-    if len(sys.argv) >= 2:
-        ticker = sys.argv[1].strip()
-        if len(sys.argv) >= 3:
-            return ticker, " ".join(sys.argv[2:]).strip()
-        return ticker, input("Constraint: ").strip()
-    return input("Ticker: ").strip(), input("Constraint: ").strip()
+def read_input() -> DebateRequest:
+    ticker = sys.argv[1] if len(sys.argv) > 1 else input("Ticker: ")
+    constraint = " ".join(sys.argv[2:]) if len(sys.argv) > 2 else input("Constraint: ")
+    return DebateRequest(ticker=ticker, constraint=constraint)
 
 
-def main():
+def main() -> int:
     try:
-        init_db()
-    except Exception:
-        pass
-    ticker, constraint = read_input()
-    graph = build_graph()
-    out = graph.invoke({"raw_ticker": ticker, "constraint": constraint, "history": []})
-    retry_used = False
-    if out.get("weak"):
-        retry_used = True
-        out = graph.invoke(
-            {
-                "raw_ticker": ticker,
-                "constraint": constraint,
-                "history": out.get("history", []) + [f"Retry: confidence {out['confidence']:.2f} below threshold"],
-            }
+        request = read_input()
+        settings = get_settings()
+        if not settings.groq_api_key:
+            raise ModelError("GROQ_API_KEY is required to run a debate")
+        started = monotonic()
+        result = build_graph().invoke(
+            {"raw_ticker": request.ticker, "constraint": request.constraint}
         )
-    metrics = evaluate_reasoning(out)
-    out.update(metrics)
-    trend = (
-        f"Last time: {out['previous_decision']} ({out['previous_confidence']:.2f}) -> "
-        f"Now: {out['decision']} ({out['confidence']:.2f})"
-        if out.get("previous_decision")
-        else f"Now: {out['decision']} ({out['confidence']:.2f})"
-    )
-    print(f"\nTicker: {out['ticker']} -> {out['symbol']}")
-    print(f"Constraint: {out['constraint']}")
-    print(f"Trend: {trend}")
-    print(f"\nBull:\n{out['bull_argument']}")
-    print(f"\nBear attack:\n{out['bear_attack']}")
-    print(f"\nBull defense:\n{out['bull_defense']}")
-    print(f"\nBear defends:\n{out['bear_defends']}")
-    print(f"\nFinal Decision: {out['decision']}")
-    print(f"Confidence: {out['confidence']}")
-    print(f"Reasoning: {out['reasoning']}")
-    if retry_used:
-        print("Retry: used once")
-    if out.get("eval_relevancy") is not None:
-        print(f"Reasoning quality: {out['eval_relevancy']:.3f}")
-    if out.get("eval_error"):
-        print("Ragas error:")
-        print(out["eval_error"].strip())
-    try:
-        save_run(out["ticker"], out["constraint"], out["decision"], out["confidence"])
-    except Exception:
-        pass
+        latency_ms = round((monotonic() - started) * 1000)
+        stored = False
+        if settings.database_url:
+            init_db()
+            stored = save_run(
+                ticker=result["ticker"],
+                constraint=result["constraint"],
+                decision=result["decision"],
+                confidence=result["confidence"],
+                summary=result["summary"],
+                risks=result["risks"],
+                latency_ms=latency_ms,
+                retry_count=0,
+                model_name=settings.groq_model,
+            )
+    except (ValidationError, ModelError, MarketDataError, NewsDataError, ValueError) as exc:
+        print(f"Debate failed: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:  # noqa: BLE001 - the CLI must show an observable failure
+        print(f"Debate failed unexpectedly: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+    print(f"Ticker: {result['ticker']}")
+    print(f"Decision: {result['decision']} ({result['confidence']:.2f})")
+    print(f"Summary: {result['summary']}")
+    print(f"Risks: {', '.join(result['risks']) or 'None listed'}")
+    print(f"Limitations: {', '.join(result['limitations']) or 'None listed'}")
+    print(f"Latency: {latency_ms} ms")
+    print("Saved to PostgreSQL" if stored else "Not saved: DATABASE_URL is unset")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

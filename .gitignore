@@ -9,6 +9,5 @@ wheels/
 # Virtual environments
 .venv
 
-learn.md
-
 .env
+LEARNING.md

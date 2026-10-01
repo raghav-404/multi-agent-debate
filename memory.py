@@ -1,71 +1,73 @@
-import psycopg2
+import psycopg
+from psycopg.types.json import Jsonb
 
-from config import DATABASE_URL, MEMORY_TABLE, VECTOR_DIM
-
-
-def enabled():
-    return bool(DATABASE_URL)
+from config import get_settings
 
 
-def connect():
-    return psycopg2.connect(DATABASE_URL)
-
-
-def init_db():
-    if not enabled():
+def init_db() -> bool:
+    database_url = get_settings().database_url
+    if not database_url:
         return False
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
-        cur.execute(
-            f"""
-            CREATE TABLE IF NOT EXISTS {MEMORY_TABLE} (
-                id bigserial PRIMARY KEY,
-                ticker text NOT NULL,
-                trade_constraint text NOT NULL,
-                decision text NOT NULL,
-                confidence real NOT NULL,
-                embedding vector({VECTOR_DIM}) NOT NULL,
-                created_at timestamptz NOT NULL DEFAULT now()
-            )
+    with (
+        psycopg.connect(database_url, connect_timeout=5) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute(
             """
+                CREATE TABLE IF NOT EXISTS debate_decisions (
+                    id BIGSERIAL PRIMARY KEY,
+                    ticker TEXT NOT NULL,
+                    trade_constraint TEXT NOT NULL,
+                    decision TEXT NOT NULL,
+                    confidence DOUBLE PRECISION NOT NULL CHECK (confidence BETWEEN 0 AND 1),
+                    summary TEXT NOT NULL,
+                    risks JSONB NOT NULL,
+                    latency_ms INTEGER NOT NULL,
+                    retry_count INTEGER NOT NULL,
+                    model_name TEXT NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
         )
-        cur.execute(f"CREATE INDEX IF NOT EXISTS {MEMORY_TABLE}_ticker_time_idx ON {MEMORY_TABLE} (ticker, created_at DESC)")
     return True
 
 
-def load_last(ticker):
-    if not enabled():
-        return None
-    try:
-        with connect() as conn, conn.cursor() as cur:
-            cur.execute(
-                f"""
-                SELECT decision, confidence
-                FROM {MEMORY_TABLE}
-                WHERE ticker = %s
-                ORDER BY created_at DESC
-                LIMIT 1
+def save_run(
+    *,
+    ticker: str,
+    constraint: str,
+    decision: str,
+    confidence: float,
+    summary: str,
+    risks: list[str],
+    latency_ms: int,
+    retry_count: int,
+    model_name: str,
+) -> bool:
+    database_url = get_settings().database_url
+    if not database_url:
+        return False
+    with (
+        psycopg.connect(database_url, connect_timeout=5) as connection,
+        connection.cursor() as cursor,
+    ):
+        cursor.execute(
+            """
+                INSERT INTO debate_decisions
+                    (ticker, trade_constraint, decision, confidence, summary, risks,
+                     latency_ms, retry_count, model_name)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (ticker.upper(),),
-            )
-            row = cur.fetchone()
-    except Exception:
-        return None
-    if not row:
-        return None
-    return {"previous_decision": row[0], "previous_confidence": float(row[1])}
-
-
-def save_run(ticker, constraint, decision, confidence):
-    if not enabled():
-        return
-    d = {"BUY": 1.0, "SELL": -1.0, "NEUTRAL": 0.0}.get(decision, 0.0)
-    embedding = f"[{float(confidence):.4f},{d:.1f},{float(len(constraint)):.1f}]"
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute(
-            f"""
-            INSERT INTO {MEMORY_TABLE} (ticker, trade_constraint, decision, confidence, embedding)
-            VALUES (%s, %s, %s, %s, %s::vector)
-            """,
-            (ticker.upper(), constraint, decision, confidence, embedding),
+            (
+                ticker,
+                constraint,
+                decision,
+                confidence,
+                summary,
+                Jsonb(risks),
+                latency_ms,
+                retry_count,
+                model_name,
+            ),
         )
+    return True
