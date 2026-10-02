@@ -25,7 +25,7 @@ def main() -> int:
             raise ModelError("GROQ_API_KEY is required to run a debate")
         started = monotonic()
         result = build_graph().invoke(
-            {"raw_ticker": request.ticker, "constraint": request.constraint}
+            {"raw_ticker": request.ticker, "constraint": request.constraint, "retry_count": 0}
         )
         latency_ms = round((monotonic() - started) * 1000)
         stored = False
@@ -39,7 +39,7 @@ def main() -> int:
                 summary=result["summary"],
                 risks=result["risks"],
                 latency_ms=latency_ms,
-                retry_count=0,
+                retry_count=result["retry_count"],
                 model_name=settings.groq_model,
             )
     except (ValidationError, ModelError, MarketDataError, NewsDataError, ValueError) as exc:
@@ -51,8 +51,14 @@ def main() -> int:
     print(f"Ticker: {result['ticker']}")
     print(f"Decision: {result['decision']} ({result['confidence']:.2f})")
     print(f"Summary: {result['summary']}")
+    print("Evidence cited:")
+    cited_ids = set(result["supporting_evidence"])
+    for item in result["evidence"]:
+        if item.id in cited_ids:
+            print(f"  [{item.id}] {item.text}")
     print(f"Risks: {', '.join(result['risks']) or 'None listed'}")
     print(f"Limitations: {', '.join(result['limitations']) or 'None listed'}")
+    print(f"Critique retries: {result['retry_count']}")
     print(f"Latency: {latency_ms} ms")
     print("Saved to PostgreSQL" if stored else "Not saved: DATABASE_URL is unset")
     return 0

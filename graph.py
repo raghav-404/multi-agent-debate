@@ -1,40 +1,49 @@
-from typing import TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
-from agents import bear_attack, bear_defends, bull, bull_defense, judge, user_input
+from agents import bear_critique, bull_analysis, bull_revision, collect_context, critic, judge
+from config import get_settings
+from schemas import Evidence
 
 
-class State(TypedDict, total=False):
+class State(TypedDict):
     raw_ticker: str
-    ticker: str
     constraint: str
-    market_data: str
-    news: list[str]
-    bull_argument: str
-    bear_attack: str
-    bull_defense: str
-    bear_defends: str
-    decision: str
-    confidence: float
-    summary: str
-    risks: list[str]
-    limitations: list[str]
+    retry_count: int
+    ticker: NotRequired[str]
+    evidence: NotRequired[list[Evidence]]
+    bull_argument: NotRequired[str]
+    bear_critique: NotRequired[str]
+    bull_revision: NotRequired[str]
+    critic_feedback: NotRequired[str]
+    decision: NotRequired[str]
+    confidence: NotRequired[float]
+    summary: NotRequired[str]
+    supporting_evidence: NotRequired[list[str]]
+    risks: NotRequired[list[str]]
+    limitations: NotRequired[list[str]]
+
+
+def confidence_router(state: State) -> Literal["critic", "done"]:
+    if state["confidence"] < get_settings().retry_threshold and state["retry_count"] < 1:
+        return "critic"
+    return "done"
 
 
 def build_graph():
     graph = StateGraph(State)
-    graph.add_node("user_input", user_input)
-    graph.add_node("bull", bull)
-    graph.add_node("bear_attack", bear_attack)
-    graph.add_node("bull_defense", bull_defense)
-    graph.add_node("bear_defends", bear_defends)
+    graph.add_node("collect_context", collect_context)
+    graph.add_node("bull_analysis", bull_analysis)
+    graph.add_node("bear_critique", bear_critique)
+    graph.add_node("bull_revision", bull_revision)
     graph.add_node("judge", judge)
-    graph.add_edge(START, "user_input")
-    graph.add_edge("user_input", "bull")
-    graph.add_edge("bull", "bear_attack")
-    graph.add_edge("bear_attack", "bull_defense")
-    graph.add_edge("bull_defense", "bear_defends")
-    graph.add_edge("bear_defends", "judge")
-    graph.add_edge("judge", END)
+    graph.add_node("critic", critic)
+    graph.add_edge(START, "collect_context")
+    graph.add_edge("collect_context", "bull_analysis")
+    graph.add_edge("bull_analysis", "bear_critique")
+    graph.add_edge("bear_critique", "bull_revision")
+    graph.add_edge("bull_revision", "judge")
+    graph.add_conditional_edges("judge", confidence_router, {"critic": "critic", "done": END})
+    graph.add_edge("critic", "judge")
     return graph.compile()

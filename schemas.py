@@ -1,5 +1,6 @@
 import re
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -25,11 +26,20 @@ class Decision(StrEnum):
     SELL = "SELL"
 
 
+class Evidence(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^(price|news)_[1-9][0-9]*$")
+    source: Literal["price", "news"]
+    text: str = Field(min_length=1)
+
+
 class JudgeDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     decision: Decision
     confidence: float = Field(ge=0, le=1)
     summary: str = Field(min_length=1, max_length=2000)
+    supporting_evidence: list[str] = Field(min_length=1)
     risks: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)

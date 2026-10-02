@@ -2,11 +2,21 @@
 
 A learning project that asks role-specialized agents using one configured Groq model to debate a ticker, then asks a Judge for a validated decision. It is a decision-support demonstration, not a price predictor, trading bot, or financial advice.
 
-## Current status: Phase 1
+## Current status: Phase 2
 
-The CLI runs a linear LangGraph flow: collect recent price data and headlines → Bull → Bear → Bull response → Bear response → Judge. The Judge must return valid JSON that passes a Pydantic schema. Invalid output and external failures stop the run. PostgreSQL storage is optional; if `DATABASE_URL` is set, a successful decision is stored. A database failure fails the CLI run.
+The CLI runs this LangGraph flow:
 
-Confidence routing, evidence IDs, the API, and evaluation are planned for later phases. Agent arguments are interpretations, not verified market facts. One shared model plays all roles.
+```text
+collect context → Bull → Bear → Bull revision → Judge
+                                            ↓
+                              confidence below threshold?
+                                yes → Critic → Judge → end
+                                 no ────────────────→ end
+```
+
+Retrieved price and headline items receive request-level IDs such as `price_1` and `news_1`. The Judge returns JSON validated by Pydantic and must cite at least one ID from that request. A confidence below the configured threshold triggers one Critic pass and a final Judge revision. Invalid output and external failures stop the run. PostgreSQL storage is optional; if configured, a database failure fails the CLI run.
+
+One shared model plays all roles. Agent arguments are interpretations, not verified market facts. The model's confidence controls routing but is not a calibrated probability.
 
 ## macOS setup
 
@@ -22,7 +32,7 @@ set +a
 uv run python main.py AAPL "Long-term investing"
 ```
 
-`GROQ_MODEL` defaults to `openai/gpt-oss-20b`. `RETRY_THRESHOLD` is reserved for Phase 2. `DATABASE_URL` is optional. If you enable it, create the PostgreSQL database named in your URL before running the CLI; the program creates its table. No pgvector extension is needed.
+`GROQ_MODEL` defaults to `openai/gpt-oss-20b`. `RETRY_THRESHOLD` defaults to `0.6`. `DATABASE_URL` is optional. If you enable it, create the PostgreSQL database named in your URL before running the CLI; the program creates its table. No pgvector extension is needed.
 
 ## Checks
 
@@ -35,4 +45,4 @@ Tests use mocks and make no live model, market, news, or database calls. There a
 
 ## Limitations
 
-The current price and headline providers may omit data or fail. Headlines are not fact checked. The Judge's confidence is a model estimate, not a calibrated probability. The workflow currently has no evidence-linked citations or retry path. Do not use its output as investment advice.
+The current price and headline providers may omit data or fail. Headlines are not fact checked; their IDs show which provider items were used, not that those items are true. An invalid Judge response fails instead of receiving another model attempt. There is no API or evaluation harness yet. Do not use the output as investment advice.
