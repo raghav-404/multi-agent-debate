@@ -26,6 +26,7 @@ def valid_response():
         limitations=[],
         latency_ms=120,
         retry_count=1,
+        model_calls=6,
         model_name="test-model",
         persisted=False,
     )
@@ -66,6 +67,8 @@ def test_post_debates_runs_shared_service_offline(monkeypatch):
                 "risks": [],
                 "limitations": [],
                 "retry_count": 0,
+                "model_calls": 4,
+                "token_reports": [],
             }
 
     monkeypatch.setattr(service, "build_graph", FakeGraph)

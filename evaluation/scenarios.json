@@ -1,0 +1,20 @@
+[
+  {"id": "s01", "ticker": "AAPL", "constraint": "Long-term investor with moderate risk tolerance"},
+  {"id": "s02", "ticker": "MSFT", "constraint": "Prioritize stable cash flow over rapid growth"},
+  {"id": "s03", "ticker": "NVDA", "constraint": "Avoid large short-term drawdowns"},
+  {"id": "s04", "ticker": "GOOGL", "constraint": "Five-year horizon with moderate risk tolerance"},
+  {"id": "s05", "ticker": "AMZN", "constraint": "Growth focus with a three-year horizon"},
+  {"id": "s06", "ticker": "META", "constraint": "Concerned about regulatory risk"},
+  {"id": "s07", "ticker": "TSLA", "constraint": "Conservative investor seeking capital preservation"},
+  {"id": "s08", "ticker": "JPM", "constraint": "Income-oriented investor with a two-year horizon"},
+  {"id": "s09", "ticker": "JNJ", "constraint": "Prefer lower volatility and established businesses"},
+  {"id": "s10", "ticker": "XOM", "constraint": "Concerned about commodity-price cycles"},
+  {"id": "s11", "ticker": "WMT", "constraint": "Defensive holding for a three-year horizon"},
+  {"id": "s12", "ticker": "KO", "constraint": "Prioritize dividend stability"},
+  {"id": "s13", "ticker": "DIS", "constraint": "Turnaround thesis with moderate risk tolerance"},
+  {"id": "s14", "ticker": "UNH", "constraint": "Avoid major policy and regulatory uncertainty"},
+  {"id": "s15", "ticker": "INTC", "constraint": "High risk tolerance but require clear downside risks"},
+  {"id": "s16", "ticker": "SPY", "constraint": "Broad-market exposure for a five-year horizon"},
+  {"id": "s17", "ticker": "QQQ", "constraint": "Technology exposure with moderate risk tolerance"},
+  {"id": "s18", "ticker": "TLT", "constraint": "Concerned about interest-rate sensitivity"}
+]

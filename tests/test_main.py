@@ -16,6 +16,7 @@ def test_cli_uses_shared_service(monkeypatch, capsys):
         limitations=[],
         latency_ms=100,
         retry_count=1,
+        model_calls=6,
         model_name="model",
         persisted=False,
     )

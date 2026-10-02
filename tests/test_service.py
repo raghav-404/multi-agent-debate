@@ -22,12 +22,20 @@ def fake_graph_result():
         "risks": ["volatility"],
         "limitations": [],
         "retry_count": 1,
+        "model_calls": 6,
+        "token_reports": [],
     }
 
 
 class FakeGraph:
     def invoke(self, state):
-        assert state == {"raw_ticker": "AAPL", "constraint": "long term", "retry_count": 0}
+        assert state == {
+            "raw_ticker": "AAPL",
+            "constraint": "long term",
+            "retry_count": 0,
+            "model_calls": 0,
+            "token_reports": [],
+        }
         return fake_graph_result()
 
 
@@ -47,8 +55,50 @@ def test_service_returns_cited_evidence_without_database(monkeypatch):
     )
     assert result.ticker == "AAPL"
     assert result.retry_count == 1
+    assert result.model_calls == 6
+    assert result.prompt_tokens is None
     assert result.persisted is False
     assert [item.id for item in result.evidence_used] == ["price_1"]
+
+
+def test_service_reports_tokens_only_when_every_call_has_usage(monkeypatch):
+    class UsageGraph:
+        def invoke(self, state):
+            return fake_graph_result() | {
+                "model_calls": 2,
+                "token_reports": [
+                    {"prompt_tokens": 4, "completion_tokens": 2},
+                    {"prompt_tokens": 6, "completion_tokens": 3},
+                ],
+            }
+
+    monkeypatch.setattr(service, "get_settings", lambda: settings())
+    result = service.run_debate(
+        DebateRequest(ticker="AAPL", constraint="long term"), graph_runner=UsageGraph()
+    )
+    assert result.model_calls == 2
+    assert result.prompt_tokens == 10
+    assert result.completion_tokens == 5
+
+
+def test_evaluation_context_skips_database_write(monkeypatch):
+    class SuppliedContextGraph:
+        def invoke(self, state):
+            assert [item.id for item in state["provided_evidence"]] == ["price_1"]
+            return fake_graph_result()
+
+    def storage_must_not_run(**kwargs):
+        raise AssertionError("evaluation wrote a historical decision")
+
+    monkeypatch.setattr(service, "get_settings", lambda: settings("postgresql://test"))
+    monkeypatch.setattr(service, "save_run", storage_must_not_run)
+    result = service.run_debate(
+        DebateRequest(ticker="AAPL", constraint="long term"),
+        graph_runner=SuppliedContextGraph(),
+        evidence=[Evidence(id="price_1", source="price", text="snapshot")],
+        persist=False,
+    )
+    assert result.persisted is False
 
 
 def test_service_stores_final_decision(monkeypatch):
@@ -116,7 +166,7 @@ def test_service_rejects_citation_missing_from_context(monkeypatch):
             return fake_graph_result() | {"supporting_evidence": ["news_9"]}
 
     monkeypatch.setattr(service, "get_settings", lambda: settings())
-    with pytest.raises(service.ModelError, match="evidence not present"):
+    with pytest.raises(service.EvidenceCitationError, match="evidence not present"):
         service.run_debate(
             DebateRequest(ticker="AAPL", constraint="long term"), graph_runner=BadGraph()
         )
@@ -132,7 +182,7 @@ def test_invalid_graph_decision_is_not_stored(monkeypatch):
 
     monkeypatch.setattr(service, "get_settings", lambda: settings("postgresql://test"))
     monkeypatch.setattr(service, "save_run", storage_must_not_run)
-    with pytest.raises(service.ModelOutputError, match="invalid decision"):
+    with pytest.raises(service.JudgeOutputError, match="invalid decision"):
         service.run_debate(
             DebateRequest(ticker="AAPL", constraint="long term"), graph_runner=BadGraph()
         )

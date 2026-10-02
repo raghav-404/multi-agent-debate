@@ -3,11 +3,11 @@ from time import monotonic
 import psycopg
 from pydantic import ValidationError
 
-from agents import ModelError, ModelOutputError
+from agents import EvidenceCitationError, JudgeOutputError
 from config import get_settings
 from graph import build_graph
 from memory import save_run
-from schemas import DebateRequest, DebateResponse, JudgeDecision
+from schemas import DebateRequest, DebateResponse, Evidence, JudgeDecision
 
 
 class ConfigurationError(RuntimeError):
@@ -18,7 +18,13 @@ class PersistenceError(RuntimeError):
     pass
 
 
-def run_debate(request: DebateRequest, *, graph_runner=None) -> DebateResponse:
+def run_debate(
+    request: DebateRequest,
+    *,
+    graph_runner=None,
+    evidence: list[Evidence] | None = None,
+    persist: bool = True,
+) -> DebateResponse:
     try:
         settings = get_settings()
     except ValueError as exc:
@@ -29,9 +35,16 @@ def run_debate(request: DebateRequest, *, graph_runner=None) -> DebateResponse:
     started = monotonic()
     if graph_runner is None:
         graph_runner = build_graph()
-    result = graph_runner.invoke(
-        {"raw_ticker": request.ticker, "constraint": request.constraint, "retry_count": 0}
-    )
+    initial_state = {
+        "raw_ticker": request.ticker,
+        "constraint": request.constraint,
+        "retry_count": 0,
+        "model_calls": 0,
+        "token_reports": [],
+    }
+    if evidence is not None:
+        initial_state["provided_evidence"] = evidence
+    result = graph_runner.invoke(initial_state)
     latency_ms = round((monotonic() - started) * 1000)
     try:
         decision = JudgeDecision.model_validate(
@@ -48,14 +61,21 @@ def run_debate(request: DebateRequest, *, graph_runner=None) -> DebateResponse:
             }
         )
     except ValidationError as exc:
-        raise ModelOutputError("Workflow returned an invalid decision") from exc
+        raise JudgeOutputError("Workflow returned an invalid decision") from exc
     cited_ids = set(decision.supporting_evidence)
     evidence_used = [item for item in result["evidence"] if item.id in cited_ids]
     if len({item.id for item in evidence_used}) != len(cited_ids):
-        raise ModelError("Judge cited evidence not present in this request")
+        raise EvidenceCitationError("Judge cited evidence not present in this request")
+    model_calls = result["model_calls"]
+    reports = result["token_reports"]
+    complete_usage = len(reports) == model_calls
+    prompt_tokens = sum(item["prompt_tokens"] for item in reports) if complete_usage else None
+    completion_tokens = (
+        sum(item["completion_tokens"] for item in reports) if complete_usage else None
+    )
 
     persisted = False
-    if settings.database_url:
+    if persist and settings.database_url:
         try:
             persisted = save_run(
                 ticker=request.ticker,
@@ -85,6 +105,9 @@ def run_debate(request: DebateRequest, *, graph_runner=None) -> DebateResponse:
         limitations=decision.limitations,
         latency_ms=latency_ms,
         retry_count=result["retry_count"],
+        model_calls=model_calls,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
         model_name=settings.groq_model,
         persisted=persisted,
     )

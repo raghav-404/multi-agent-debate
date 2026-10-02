@@ -51,5 +51,8 @@ class DebateResponse(JudgeDecision):
     evidence_used: list[Evidence]
     latency_ms: int = Field(ge=0)
     retry_count: int = Field(ge=0, le=1)
+    model_calls: int = Field(ge=1)
+    prompt_tokens: int | None = Field(default=None, ge=0)
+    completion_tokens: int | None = Field(default=None, ge=0)
     model_name: str
     persisted: bool

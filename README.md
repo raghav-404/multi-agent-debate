@@ -2,7 +2,7 @@
 
 A learning project that asks role-specialized agents using one configured Groq model to debate a ticker, then asks a Judge for a validated decision. It is a decision-support demonstration, not a price predictor, trading bot, or financial advice.
 
-## Current status: Phase 3
+## How it works
 
 The CLI and API share this LangGraph flow:
 
@@ -17,6 +17,8 @@ collect context → Bull → Bear → Bull revision → Judge
 Retrieved price and headline items receive request-level IDs such as `price_1` and `news_1`. The Judge returns JSON validated by Pydantic and must cite at least one ID from that request. A confidence below the configured threshold triggers one Critic pass and a final Judge revision. Invalid output and external failures stop the request.
 
 One shared model plays all roles. Agent arguments are interpretations, not verified market facts. The model's confidence controls routing but is not a calibrated probability.
+
+The stack is Python, LangGraph, Groq, FastAPI, Pydantic, PostgreSQL with psycopg, uv, pytest, and Ruff. Docker Compose runs only optional local PostgreSQL.
 
 ## macOS setup
 
@@ -71,12 +73,15 @@ Illustrative response shape, not a recorded result:
   "evidence_used": [{"id": "price_1", "source": "price", "text": "Example retrieved price summary"}],
   "latency_ms": 0,
   "retry_count": 0,
+  "model_calls": 4,
+  "prompt_tokens": null,
+  "completion_tokens": null,
   "model_name": "openai/gpt-oss-20b",
   "persisted": false
 }
 ```
 
-`latency_ms` measures graph execution, excluding the optional database write. Invalid requests return HTTP 422; model or data provider failures return 502; configured storage failures return 503.
+`latency_ms` measures graph execution, excluding the optional database write. Token fields are `null` unless the provider reported usage for every model call. Invalid requests return HTTP 422; model or data provider failures return 502; configured storage failures return 503.
 
 ## Checks
 
@@ -85,8 +90,33 @@ uv run pytest -q
 uv run ruff check .
 ```
 
-Tests use mocks and make no live model, market, news, or database calls. There are no benchmark results yet.
+Tests use mocks and make no live model, market, news, or database calls.
+
+## Evaluation
+
+`evaluation/scenarios.json` fixes 18 ticker/constraint scenarios without correctness labels. For each scenario, the harness retrieves context once and gives the same snapshot to a one-call baseline and the debate across repeated runs. Run the full dataset only when you intend to make live provider and Groq calls:
+
+```bash
+uv run python -m evaluation.benchmark --live --repeats 2
+```
+
+If all attempts complete, this makes 180–252 model calls. The command saves actual contexts, per-run records, and metrics under ignored `evaluation/results/`. There are no benchmark results in this repository. An example of the **output schema**, with no invented measurements, is:
+
+```json
+{
+  "scenario_count": "integer",
+  "repeats": "integer",
+  "contexts": "one retrieved snapshot or failure per scenario",
+  "records": "one completed or failed record per scenario, method, and repeat",
+  "metrics": {
+    "baseline": "completion, schema/citation validity, retry, latency, calls, consistency, reported tokens",
+    "debate": "the same metrics"
+  }
+}
+```
+
+Metrics describe reliability and cost, not financial accuracy. Rates exclude cases where the property could not be evaluated; latency and model-call totals cover completed runs. Decision consistency compares scenarios with all repeats completed. Token totals cover only completed runs with usage reported for every call.
 
 ## Limitations
 
-The current price and headline providers may omit data or fail. Headlines are not fact checked; their IDs show which provider items were used, not that those items are true. An invalid Judge response fails instead of receiving another model attempt. There is no evaluation harness or measured decision quality yet. Do not use the output as investment advice.
+The price and headline providers may omit data or fail. Headlines are not fact checked; IDs show which provider items were used, not that those items are true. The fixed scenarios are reproducible, but live prices, headlines, and model responses change over time; saved context snapshots make each result inspectable. The dataset has no defensible decision labels, so the evaluation does not measure financial correctness. Do not use output as investment advice.

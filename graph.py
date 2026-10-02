@@ -1,4 +1,5 @@
-from typing import Literal, NotRequired, TypedDict
+import operator
+from typing import Annotated, Literal, NotRequired, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -11,8 +12,11 @@ class State(TypedDict):
     raw_ticker: str
     constraint: str
     retry_count: int
+    model_calls: Annotated[int, operator.add]
+    token_reports: Annotated[list[dict[str, int]], operator.add]
     ticker: NotRequired[str]
     evidence: NotRequired[list[Evidence]]
+    provided_evidence: NotRequired[list[Evidence]]
     bull_argument: NotRequired[str]
     bear_critique: NotRequired[str]
     bull_revision: NotRequired[str]
