@@ -1,60 +1,28 @@
-from types import SimpleNamespace
-
 import main
-from schemas import DebateRequest, Evidence
+from schemas import DebateRequest, DebateResponse, Evidence
 
 
-def test_cli_missing_key_fails_before_graph_runs(monkeypatch, capsys):
-    monkeypatch.setattr(
-        main, "read_input", lambda: DebateRequest(ticker="AAPL", constraint="long term")
+def test_cli_uses_shared_service(monkeypatch, capsys):
+    request = DebateRequest(ticker="aapl", constraint="long term")
+    response = DebateResponse(
+        ticker="AAPL",
+        constraint="long term",
+        decision="HOLD",
+        confidence=0.4,
+        summary="uncertain",
+        supporting_evidence=["price_1"],
+        evidence_used=[Evidence(id="price_1", source="price", text="price summary")],
+        risks=["volatility"],
+        limitations=[],
+        latency_ms=100,
+        retry_count=1,
+        model_name="model",
+        persisted=False,
     )
-    monkeypatch.setattr(main, "get_settings", lambda: SimpleNamespace(groq_api_key=""))
-
-    def graph_must_not_run():
-        raise AssertionError("graph ran without an API key")
-
-    monkeypatch.setattr(main, "build_graph", graph_must_not_run)
-    assert main.main() == 1
-    assert "GROQ_API_KEY is required" in capsys.readouterr().err
-
-
-def test_cli_passes_retry_count_to_history_store(monkeypatch, capsys):
-    saved = {}
-
-    class FakeGraph:
-        def invoke(self, state):
-            assert state["retry_count"] == 0
-            return {
-                "ticker": "AAPL",
-                "constraint": "long term",
-                "decision": "HOLD",
-                "confidence": 0.4,
-                "summary": "uncertain",
-                "supporting_evidence": ["price_1"],
-                "evidence": [Evidence(id="price_1", source="price", text="price summary")],
-                "risks": ["volatility"],
-                "limitations": [],
-                "retry_count": 1,
-            }
-
-    monkeypatch.setattr(
-        main, "read_input", lambda: DebateRequest(ticker="AAPL", constraint="long term")
-    )
-    monkeypatch.setattr(
-        main,
-        "get_settings",
-        lambda: SimpleNamespace(
-            groq_api_key="test", database_url="postgresql://test", groq_model="model"
-        ),
-    )
-    monkeypatch.setattr(main, "build_graph", FakeGraph)
-    monkeypatch.setattr(main, "init_db", lambda: True)
-
-    def save(**kwargs):
-        saved.update(kwargs)
-        return True
-
-    monkeypatch.setattr(main, "save_run", save)
+    monkeypatch.setattr(main, "read_input", lambda: request)
+    monkeypatch.setattr(main, "run_debate", lambda value: response if value is request else None)
     assert main.main() == 0
-    assert saved["retry_count"] == 1
-    assert "[price_1] price summary" in capsys.readouterr().out
+    output = capsys.readouterr().out
+    assert "[price_1] price summary" in output
+    assert "Critique retries: 1" in output
+    assert "Not saved" in output

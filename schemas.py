@@ -43,3 +43,13 @@ class JudgeDecision(BaseModel):
     supporting_evidence: list[str] = Field(min_length=1)
     risks: list[str] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
+
+
+class DebateResponse(JudgeDecision):
+    ticker: str
+    constraint: str
+    evidence_used: list[Evidence]
+    latency_ms: int = Field(ge=0)
+    retry_count: int = Field(ge=0, le=1)
+    model_name: str
+    persisted: bool

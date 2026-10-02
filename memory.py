@@ -1,3 +1,5 @@
+import sys
+
 import psycopg
 from psycopg.types.json import Jsonb
 
@@ -71,3 +73,19 @@ def save_run(
             ),
         )
     return True
+
+
+def main() -> int:
+    try:
+        if not init_db():
+            print("DATABASE_URL is required to initialize PostgreSQL", file=sys.stderr)
+            return 1
+    except (psycopg.Error, ValueError) as exc:
+        print(f"PostgreSQL initialization failed: {type(exc).__name__}", file=sys.stderr)
+        return 1
+    print("PostgreSQL table debate_decisions is ready")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

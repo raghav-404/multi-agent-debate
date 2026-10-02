@@ -79,3 +79,9 @@ def test_database_failure_propagates(monkeypatch):
     monkeypatch.setattr(memory.psycopg, "connect", fail)
     with pytest.raises(RuntimeError, match="database unavailable"):
         memory.init_db()
+
+
+def test_init_command_reports_missing_database_url(monkeypatch, capsys):
+    monkeypatch.setattr(memory, "get_settings", lambda: SimpleNamespace(database_url=None))
+    assert memory.main() == 1
+    assert "DATABASE_URL is required" in capsys.readouterr().err
