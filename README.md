@@ -1,6 +1,6 @@
 # Reliable Multi-Agent Financial Debate System
 
-A learning project that asks role-specialized agents using one configured Groq model to debate a ticker, then asks a Judge for a validated decision. It is a decision-support demonstration, not a price predictor, trading bot, or financial advice.
+A LangGraph-based financial debate system that asks role-specialized agents using one configured Groq model to debate a ticker, then asks a Judge for a validated decision. It is a decision-support demonstration, not a price predictor, trading bot, or financial advice.
 
 ## How it works
 
